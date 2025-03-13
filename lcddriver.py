@@ -1,6 +1,5 @@
 #Source LCD-Module: https://joy-it.net/de/products/SBC-LCD16x2 (Anleitung: https://joy-it.net/files/files/Produkte/SBC-LCD16x2/SBC-LCD16x2_Anleitung_2023-09-19.pdf) --- AccessDate: 07.03.2024
 #Source: http://tutorials-raspberrypi.de/wp-content/uploads/scripts/hd44780_i2c.zip --- AccessDate: 07.03.2024
-import logging
 #     <lcddriver.py is used to control a LCD-module via I2C communication>
 #     Copyright (C) <2024>  <Peter Pallnstorfer>
 # 
@@ -17,12 +16,13 @@ import logging
 #     You should have received a copy of the GNU General Public License
 #     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import logging
 import sys
 # todo why do we need this?
 sys.path.append("./lib")
 
-import i2c_lib
-from time import *
+#import i2c_lib
+from time import sleep
 
 # LCD Address
 ADDRESS = 0x27
