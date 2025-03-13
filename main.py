@@ -8,96 +8,68 @@
 #Source SIM7600E-H 4G HAT: https://www.waveshare.com/wiki/SIM7600E-H_4G_HAT --- AccessDate: 19.03.2024
 #written by: Peter Pallnstorfer
 
-#License for SEN55 Software:
-#------------------------------------------------------------------------------
-# BSD 3-Clause License
-#
-# Copyright (c) 2022, Sensirion AG
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# * Redistributions of source code must retain the above copyright notice, this
-#   list of conditions and the following disclaimer.
-#
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
-#
-# * Neither the name of the copyright holder nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#------------------------------------------------------------------------------
 
-import time
-import lcddriver
-import RPi.GPIO as GPIO
-import adafruit_bme680
-import busio
-from sensirion_i2c_driver import I2cConnection, LinuxI2cTransceiver
-from sensirion_i2c_sen5x import Sen5xI2cDevice
-import adafruit_ccs811
-import udp_pops
-import logging
 import os
+import logging
+import time
 from datetime import datetime
-import SIM7600_GPS
 
-#POPS running?
+from developer_mock import (busio, GPIO,
+                           I2cConnection, LinuxI2cTransceiver, Sen5xI2cDevice,
+                           adafruit_bme680, adafruit_ccs811,
+                           udp_pops, lcddriver, SIM7600_GPS)
+
+
+# Flags and States
 POPS = True
-
-#SIM running?
 SIM = True
+exit_flag = False
+csv_flag = False
+sanity_flag = False
 
 #I2C bus initialization
-i2c = busio.I2C(3, 2)#SCL = GPIO3 ... SDA = GPIO2
+i2c = busio.I2C(3, 2) #SCL = GPIO3 ... SDA = GPIO2
 
 #BME680 initialization
 bme680 = adafruit_bme680.Adafruit_BME680_I2C(i2c)
-
 #CCS811 initialization
 ccs811 = adafruit_ccs811.CCS811(i2c)
 
-#LCD module initialization
+
+# LCD Initialization
 lcd = lcddriver.lcd()
 lcd.lcd_clear()
 
-#Function to write strings to the LCD module
+
+# Function to write strings to the LCD module
 def writeLCD(string1, string2):
     lcd.lcd_clear()
     lcd.lcd_display_string(string1, 1)
     lcd.lcd_display_string(string2, 2)
+
 
 #Callback functions for buttons
 def green_callback(channel):
     global csv_flag
     if not csv_flag:
         csv_flag = True
-    
+
+
 def red_callback(channel):
     global csv_flag
     if csv_flag:
         csv_flag = False
-    
+
+
 def yellow_callback(channel):
     global sanity_flag
     sanity_flag = True
-    
+
+
 def blue_callback(channel):
     global exit_flag
     exit_flag = True
+
 
 #Exit flag to terminate the while loop in main
 exit_flag = False
@@ -120,8 +92,8 @@ GPIO.add_event_detect(blue, GPIO.RISING, callback=blue_callback)
 led = 21
 GPIO.setup(led, GPIO.OUT)
 
-#Function to get current time from RTC module
 
+#Function to get current time from RTC module
 def getTime():
     time=datetime.now()
     year=time.year
@@ -133,6 +105,7 @@ def getTime():
     date=0
     return hour, minute, second, day, date, month, year
 
+
 #Function to receive sensor values from BME680
 def getBME680():
     temperature = bme680.temperature
@@ -140,6 +113,7 @@ def getBME680():
     pressure = bme680.pressure
     gas = bme680.gas
     return temperature, humidity, pressure, gas
+
 
 #SEN55 readiness test function
 def waitSEN55():
@@ -154,6 +128,7 @@ def waitSEN55():
         writeLCD("SEN55 not ready", "Waiting ...")
         return True
 
+
 #Function to receive sensor values from SEN55
 def getSEN55():
     values = device.read_measured_values()
@@ -167,6 +142,7 @@ def getSEN55():
     nox_index = values.nox_index.scaled
     return mc_1p0, mc_2p5, mc_4p0, mc_10p0, ambient_rh, ambient_t, voc_index, nox_index
 
+
 #CCS811 readiness test function
 def waitCCS811():
     global exit_flag
@@ -178,18 +154,20 @@ def waitCCS811():
     else:
         writeLCD("CCS811 not ready", "Waiting ...")
         return True
-    
+
+
 #Function to receive sensor values from CCS811
 def getCCS811():
     try:
-        cco2=ccs811.eco2
-        ttvoc=ccs811.tvoc
+        cco2 = ccs811.eco2
+        ttvoc = ccs811.tvoc
         return cco2, ttvoc
     except OSError as osErr:
         print("CCS811: OS error (errno {}): {}".format(osErr.errno, osErr))
-        
+
     except RuntimeError as rtErr:
         print("CCS811: RuntimeError")
+
 
 #Values of sensors and RTC can be checked on LCD for plausibility
 def sanityCheck(strDate, strTime, temp680, hum680, pres, gas, mc1p0, mc2p5, mc4p0, mc10p0, hum55, temp55, voc, nox, co2, tvoc):
@@ -237,7 +215,8 @@ def sanityCheck(strDate, strTime, temp680, hum680, pres, gas, mc1p0, mc2p5, mc4p
     sanity_flag = False
     writeLCD("Sanity Check!", "Finished!")
     time.sleep(2)
-    
+
+
 def cleanPopsData(data):
     data_array = data.split(",")
     #rnd1 = data_array[0]
@@ -297,6 +276,7 @@ def cleanPopsData(data):
     #rnd4 = data_array[54]
     return path+','+datetime+','+status+','+data_status+','+part_ct+','+hist_sum+','+part_con+','+bl+','+blth+','+std+','+max_std+','+p+','+tof_p+','+pump_life+','+width_std+','+ave_width+','+pops_flow+','+pump_fb+','+ld_temp+','+laser_fb+','+ld_mon+','+temp+','+batV+','+laser_current+','+flow_set+','+bl_start+','+th_mult+','+nbins+','+logmin+','+logmax+','+skip_save+','+min_peak_pts+','+max_peak_pts+','+raw_pts+','+b0+','+b1+','+b2+','+b3+','+b4+','+b5+','+b6+','+b7+','+b8+','+b9+','+b10+','+b11+','+b12+','+b13+','+b14+','+b15
 
+
 def getGPS():
     SIM7600_GPS.send_at('AT+CGPS=1,1', 'OK', 0.1)
     answer, gps_info = SIM7600_GPS.send_at('AT+CGPSINFO', '+CGPSINFO: ', 0.1)
@@ -327,6 +307,7 @@ def getGPS():
     speed = gps_array[7]
     course = gps_array[8]
     return info, lat, n_s, log, e_w, utc_time, alt, speed, course
+
 
 #Main function
 def main():
@@ -361,12 +342,13 @@ def main():
     #SEN55 initialization (reading data of SEN55 MUST be in the with scope)
     logging.info("setting up sensors")
     with LinuxI2cTransceiver('/dev/i2c-1') as i2c_transceiver:
-        global device
+        global device, ccs811
         device = Sen5xI2cDevice(I2cConnection(i2c_transceiver))
         device.device_reset()
         device.start_measurement()
-        #Waiting for CCS811 to be ready
-        logging.info("initializing CC811 sensor")
+        # Initialize CCS811 sensor
+        ccs811 = adafruit_ccs811  # Replace with mock or real implementation
+        logging.info("initializing CCS811 sensor")
         while waitCCS811():
             time.sleep(1)
         logging.info("sensor CC811 initialized")
@@ -443,6 +425,7 @@ def main():
             if elapsed_time < 1:
                 sleep_time = 1 - elapsed_time
                 time.sleep(sleep_time)            
+
 
 #Start of the code
 if __name__ == "__main__":
